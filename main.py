@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 all_env_vars = {k: v for k, v in os.environ.items() if 'OPENAI' in k.upper() or 'ASSISTANT' in k.upper()}
 logger.info(f"Found environment variables matching OPENAI/ASSISTANT: {list(all_env_vars.keys())}")
 
+# Debug: mostra TUTTE le chiavi delle variabili d'ambiente (per diagnosticare problemi Railway)
+all_env_keys = sorted(os.environ.keys())
+logger.info(f"Total environment variables found: {len(all_env_keys)}")
+logger.info(f"Sample environment variable keys (first 20): {all_env_keys[:20]}")
+
 # Controlliamo che la versione di OpenAI sia corretta
 required_version = version.parse("1.1.1")
 current_version = version.parse(openai.__version__)
@@ -48,7 +53,7 @@ logger.info(f"Environment variables check:")
 logger.info(f"  OPENAI_API_KEY: {'SET' if OPENAI_API_KEY else 'NOT SET'}")
 logger.info(f"  ASSISTANT_ID: {'SET' if ASSISTANT_ID else 'NOT SET'}")
 
-# Validazione delle variabili d'ambiente
+# Validazione delle variabili d'ambiente (non blocchiamo l'avvio, ma loggiamo un warning)
 missing_vars = []
 if not OPENAI_API_KEY:
     missing_vars.append("OPENAI_API_KEY")
@@ -57,11 +62,12 @@ if not ASSISTANT_ID:
 
 if missing_vars:
     error_msg = (
-        f"Missing required environment variables: {', '.join(missing_vars)}. "
-        f"Please configure them in Railway dashboard under 'Variables' tab."
+        f"WARNING: Missing required environment variables: {', '.join(missing_vars)}. "
+        f"Please configure them in Railway dashboard under 'Variables' tab. "
+        f"The application will start but endpoints will fail until variables are set."
     )
-    logger.error(error_msg)
-    raise ValueError(error_msg)
+    logger.warning(error_msg)
+    # Non blocchiamo l'avvio - permettiamo all'app di partire per permettere il debug
 
 # Inizializziamo l'app FastAPI
 app = FastAPI(
@@ -79,8 +85,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inizializziamo il client di OpenAI
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Inizializziamo il client di OpenAI (sarà None se la chiave non è impostata)
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # Definiamo il modello di richiesta per la chat
 class ChatRequest(BaseModel):
@@ -101,6 +107,24 @@ class StartResponse(BaseModel):
 @app.get('/start', response_model=StartResponse)
 async def start_conversation():
     """Avvia una nuova conversazione creando un nuovo thread."""
+    # Verifica che le variabili siano configurate
+    if not OPENAI_API_KEY or not ASSISTANT_ID:
+        missing = []
+        if not OPENAI_API_KEY:
+            missing.append("OPENAI_API_KEY")
+        if not ASSISTANT_ID:
+            missing.append("ASSISTANT_ID")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Missing required environment variables: {', '.join(missing)}. Please configure them in Railway dashboard."
+        )
+    
+    if not client:
+        raise HTTPException(
+            status_code=500,
+            detail="OpenAI client not initialized. Missing OPENAI_API_KEY."
+        )
+    
     try:
         logger.info("Starting a new conversation...")
         thread = client.beta.threads.create()
@@ -117,6 +141,18 @@ async def start_conversation():
 @app.post('/chat', response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
     """Gestisce un messaggio dell'utente e restituisce la risposta dell'assistente."""
+    # Verifica che le variabili siano configurate
+    if not OPENAI_API_KEY or not ASSISTANT_ID:
+        missing = []
+        if not OPENAI_API_KEY:
+            missing.append("OPENAI_API_KEY")
+        if not ASSISTANT_ID:
+            missing.append("ASSISTANT_ID")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Missing required environment variables: {', '.join(missing)}. Please configure them in Railway dashboard."
+        )
+    
     thread_id = chat_request.thread_id
     user_input = chat_request.message
 
@@ -130,6 +166,12 @@ async def chat(chat_request: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     logger.info(f"Received message: {user_input} for thread ID: {thread_id}")
+
+    if not client:
+        raise HTTPException(
+            status_code=500,
+            detail="OpenAI client not initialized. Missing OPENAI_API_KEY."
+        )
 
     try:
         # Inseriamo il messaggio dell'utente nella conversazione
@@ -225,9 +267,33 @@ async def chat(chat_request: ChatRequest):
 async def health_check():
     """Endpoint per verificare lo stato dell'API."""
     return {
-        "status": "healthy",
+        "status": "healthy" if (OPENAI_API_KEY and ASSISTANT_ID) else "degraded",
         "openai_version": openai.__version__,
-        "assistant_id": ASSISTANT_ID
+        "assistant_id_set": bool(ASSISTANT_ID),
+        "openai_api_key_set": bool(OPENAI_API_KEY)
+    }
+
+# Endpoint di debug per diagnosticare problemi con le variabili d'ambiente
+@app.get('/debug/env')
+async def debug_env():
+    """Endpoint di debug per verificare le variabili d'ambiente (NON ESPONE VALORI SENSIBILI)."""
+    # Mostra tutte le chiavi delle variabili d'ambiente
+    all_keys = sorted(os.environ.keys())
+    
+    # Cerca variabili che potrebbero essere correlate
+    openai_related = [k for k in all_keys if 'OPENAI' in k.upper() or 'ASSISTANT' in k.upper()]
+    
+    # Mostra alcune variabili comuni di Railway
+    railway_vars = [k for k in all_keys if 'RAILWAY' in k.upper() or 'PORT' in k.upper()]
+    
+    return {
+        "total_env_vars": len(all_keys),
+        "openai_related_vars": openai_related,
+        "railway_vars": railway_vars,
+        "openai_api_key_set": bool(OPENAI_API_KEY),
+        "assistant_id_set": bool(ASSISTANT_ID),
+        "all_env_keys": all_keys[:50],  # Prime 50 chiavi
+        "note": "This endpoint shows environment variable names only, not values"
     }
 
 # Endpoint root
