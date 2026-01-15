@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 # Carica le variabili d'ambiente dal file .env o .env.local
 # .env.local ha priorità se esiste (utile per override locali)
+# Nota: Su Railway, le variabili devono essere configurate nel dashboard
 load_dotenv('.env.local')  # Prova prima .env.local
 load_dotenv()  # Poi carica .env come fallback
 
@@ -21,6 +22,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Debug: mostra tutte le variabili d'ambiente che iniziano con OPENAI o ASSISTANT
+all_env_vars = {k: v for k, v in os.environ.items() if 'OPENAI' in k.upper() or 'ASSISTANT' in k.upper()}
+logger.info(f"Found environment variables matching OPENAI/ASSISTANT: {list(all_env_vars.keys())}")
 
 # Controlliamo che la versione di OpenAI sia corretta
 required_version = version.parse("1.1.1")
