@@ -38,11 +38,25 @@ else:
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 ASSISTANT_ID = os.getenv('ASSISTANT_ID')
 
+# Debug: mostra quali variabili sono presenti (senza valori sensibili)
+logger.info(f"Environment variables check:")
+logger.info(f"  OPENAI_API_KEY: {'SET' if OPENAI_API_KEY else 'NOT SET'}")
+logger.info(f"  ASSISTANT_ID: {'SET' if ASSISTANT_ID else 'NOT SET'}")
+
 # Validazione delle variabili d'ambiente
+missing_vars = []
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY environment variable is not set")
+    missing_vars.append("OPENAI_API_KEY")
 if not ASSISTANT_ID:
-    raise ValueError("ASSISTANT_ID environment variable is not set")
+    missing_vars.append("ASSISTANT_ID")
+
+if missing_vars:
+    error_msg = (
+        f"Missing required environment variables: {', '.join(missing_vars)}. "
+        f"Please configure them in Railway dashboard under 'Variables' tab."
+    )
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 # Inizializziamo l'app FastAPI
 app = FastAPI(
