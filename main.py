@@ -5,11 +5,13 @@ from packaging import version
 import openai
 from openai import OpenAI
 from fastapi import FastAPI, HTTPException, Request
+from fastapi import Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import asyncio
 from dotenv import load_dotenv
 from retrieve_context import retrieve_relevant_context, format_context_for_prompt
+from security import validate_and_sanitize_input, create_safe_prompt, log_security_event, detect_injection, check_rate_limit
 
 # Carica le variabili d'ambiente dal file .env o .env.local
 # .env.local ha priorità se esiste (utile per override locali)
@@ -140,7 +142,7 @@ async def start_conversation():
 
 # Endpoint per gestire il messaggio di chat
 @app.post('/chat', response_model=ChatResponse)
-async def chat(chat_request: ChatRequest):
+async def chat(chat_request: ChatRequest, request: FastAPIRequest = None):
     """Gestisce un messaggio dell'utente e restituisce la risposta dell'assistente."""
     # Verifica che le variabili siano configurate
     if not OPENAI_API_KEY or not ASSISTANT_ID:
@@ -157,7 +159,7 @@ async def chat(chat_request: ChatRequest):
     thread_id = chat_request.thread_id
     user_input = chat_request.message
 
-    # Validazione input
+    # Validazione input base
     if not thread_id:
         logger.error("Error: Missing thread_id")
         raise HTTPException(status_code=400, detail="Missing thread_id")
@@ -166,7 +168,29 @@ async def chat(chat_request: ChatRequest):
         logger.error("Error: Empty message")
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    logger.info(f"Received message: {user_input} for thread ID: {thread_id}")
+    # 🔒 SICUREZZA: Rate limiting basato su IP (se disponibile)
+    if request:
+        client_ip = request.client.host if request.client else None
+        if client_ip:
+            allowed, rate_error = check_rate_limit(f"ip_{client_ip}")
+            if not allowed:
+                log_security_event("RATE_LIMIT_EXCEEDED", f"IP: {client_ip}", thread_id)
+                raise HTTPException(
+                    status_code=429,
+                    detail="Troppe richieste. Riprova più tardi."
+                )
+    
+    # 🔒 SICUREZZA: Validazione e sanitizzazione input
+    sanitized_input, security_error = validate_and_sanitize_input(user_input, thread_id)
+    
+    if security_error:
+        log_security_event("INPUT_REJECTED", security_error, thread_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Input non valido. Per favore, riformula la tua domanda."
+        )
+    
+    logger.info(f"Received message (sanitized): {sanitized_input[:100]}... for thread ID: {thread_id}")
 
     if not client:
         raise HTTPException(
@@ -175,17 +199,18 @@ async def chat(chat_request: ChatRequest):
         )
 
     try:
-        # Recupera contesto rilevante da Qdrant
+        # Recupera contesto rilevante da Qdrant (usa input sanitizzato)
         logger.info("Recuperando contesto rilevante da Qdrant...")
-        relevant_contexts = retrieve_relevant_context(user_input, top_k=3)
+        relevant_contexts = retrieve_relevant_context(sanitized_input, top_k=3)
         
-        # Prepara il messaggio con contesto
+        # 🔒 SICUREZZA: Crea prompt sicuro per prevenire injection
         if relevant_contexts:
             context_text = format_context_for_prompt(relevant_contexts)
-            enhanced_message = f"{context_text}Domanda dell'utente: {user_input}"
+            enhanced_message = create_safe_prompt(context_text, sanitized_input)
             logger.info(f"Contesto recuperato: {len(relevant_contexts)} chunk rilevanti")
         else:
-            enhanced_message = user_input
+            # Anche senza contesto, usa formato sicuro
+            enhanced_message = create_safe_prompt("", sanitized_input)
             logger.info("Nessun contesto rilevante trovato in Qdrant")
         
         # Inseriamo il messaggio dell'utente (con contesto) nella conversazione
@@ -259,6 +284,15 @@ async def chat(chat_request: ChatRequest):
 
         # Recuperiamo il testo della risposta
         response = messages.data[0].content[0].text.value
+        
+        # 🔒 SICUREZZA: Verifica che la risposta non contenga tentativi di injection
+        # (doppio controllo per sicurezza)
+        if response:
+            is_injection, reason = detect_injection(response)
+            if is_injection:
+                log_security_event("RESPONSE_INJECTION_DETECTED", reason, thread_id)
+                # Non restituiamo la risposta sospetta
+                response = "Mi dispiace, non posso elaborare questa richiesta. Per favore, riformula la tua domanda."
 
         logger.info(f"Assistant response generated successfully for thread {thread_id}")
 
