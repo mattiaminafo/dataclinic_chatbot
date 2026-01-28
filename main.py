@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import asyncio
 from dotenv import load_dotenv
+from retrieve_context import retrieve_relevant_context, format_context_for_prompt
 
 # Carica le variabili d'ambiente dal file .env o .env.local
 # .env.local ha priorità se esiste (utile per override locali)
@@ -174,11 +175,24 @@ async def chat(chat_request: ChatRequest):
         )
 
     try:
-        # Inseriamo il messaggio dell'utente nella conversazione
+        # Recupera contesto rilevante da Qdrant
+        logger.info("Recuperando contesto rilevante da Qdrant...")
+        relevant_contexts = retrieve_relevant_context(user_input, top_k=3)
+        
+        # Prepara il messaggio con contesto
+        if relevant_contexts:
+            context_text = format_context_for_prompt(relevant_contexts)
+            enhanced_message = f"{context_text}Domanda dell'utente: {user_input}"
+            logger.info(f"Contesto recuperato: {len(relevant_contexts)} chunk rilevanti")
+        else:
+            enhanced_message = user_input
+            logger.info("Nessun contesto rilevante trovato in Qdrant")
+        
+        # Inseriamo il messaggio dell'utente (con contesto) nella conversazione
         client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
-            content=user_input
+            content=enhanced_message
         )
 
         # Creiamo la run per l'assistente

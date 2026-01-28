@@ -44,3 +44,6 @@ Thumbs.db
 # Logs
 *.log
 
+# PDF files (non committare PDF con dati sensibili)
+*.pdf
+
