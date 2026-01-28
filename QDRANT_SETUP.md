@@ -22,13 +22,13 @@ Aggiungi al file `.env.local`:
 
 ```env
 # Qdrant Configuration
-QDRANT_URL=https://3295f9b4-ebee-474a-957d-da07a46a4a80.europe-west3-0.gcp.cloud.qdrant.io
-QDRANT_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.6hMeqzzUolOcOG5baapb2lH2trSuLoRvPbQaCiLtHkk
+QDRANT_URL=https://your-qdrant-cluster-url.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key-here
 QDRANT_COLLECTION_NAME=dataclinic_docs
 
-# OpenAI (già configurato)
-OPENAI_API_KEY=sk-proj-...
-ASSISTANT_ID=asst_...
+# OpenAI Configuration
+OPENAI_API_KEY=sk-proj-your-api-key-here
+ASSISTANT_ID=asst_your-assistant-id-here
 ```
 
 **⚠️ IMPORTANTE per Railway:**
@@ -82,11 +82,15 @@ Quando un utente fa una domanda:
 Puoi verificare che i PDF siano stati caricati correttamente:
 
 ```python
+import os
 from qdrant_client import QdrantClient
+from dotenv import load_dotenv
+
+load_dotenv('.env.local')
 
 client = QdrantClient(
-    url="https://3295f9b4-ebee-474a-957d-da07a46a4a80.europe-west3-0.gcp.cloud.qdrant.io",
-    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.6hMeqzzUolOcOG5baapb2lH2trSuLoRvPbQaCiLtHkk",
+    url=os.getenv('QDRANT_URL'),
+    api_key=os.getenv('QDRANT_API_KEY'),
 )
 
 # Conta i punti nella collection

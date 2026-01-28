@@ -9,11 +9,11 @@ pip install -r requirements.txt
 
 ### 2. Configura `.env.local`
 ```env
-QDRANT_URL=https://3295f9b4-ebee-474a-957d-da07a46a4a80.europe-west3-0.gcp.cloud.qdrant.io
-QDRANT_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.6hMeqzzUolOcOG5baapb2lH2trSuLoRvPbQaCiLtHkk
+QDRANT_URL=https://your-qdrant-cluster-url.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key-here
 QDRANT_COLLECTION_NAME=dataclinic_docs
-OPENAI_API_KEY=sk-proj-...
-ASSISTANT_ID=asst_...
+OPENAI_API_KEY=sk-proj-your-api-key-here
+ASSISTANT_ID=asst_your-assistant-id-here
 ```
 
 ### 3. Carica un PDF

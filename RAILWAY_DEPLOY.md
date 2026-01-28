@@ -40,12 +40,24 @@ git push -u origin main
 1. Nel dashboard del tuo progetto Railway, vai alla scheda **"Variables"**
 2. Aggiungi le seguenti variabili d'ambiente:
 
+   ### Variabili Obbligatorie:
+   
    ```
    OPENAI_API_KEY=sk-proj-your-api-key-here
    ASSISTANT_ID=asst_your-assistant-id-here
+   QDRANT_URL=https://your-qdrant-cluster-url.qdrant.io
+   QDRANT_API_KEY=your-qdrant-api-key-here
    ```
    
-   ⚠️ **Sostituisci con le tue credenziali reali!**
+   ### Variabili Opzionali:
+   
+   ```
+   QDRANT_COLLECTION_NAME=dataclinic_docs
+   ```
+   
+   ⚠️ **IMPORTANTE**: 
+   - Sostituisci `OPENAI_API_KEY` e `ASSISTANT_ID` con le tue credenziali reali!
+   - `QDRANT_URL` e `QDRANT_API_KEY` sono già configurati con valori di default (puoi modificarli se necessario)
 
 3. Railway riavvierà automaticamente il servizio dopo aver aggiunto le variabili
 
